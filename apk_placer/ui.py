@@ -6,17 +6,19 @@ import os
 from pathlib import Path
 import sys
 
-from PySide6.QtCore import Qt, QTimer
-from PySide6.QtGui import QAction, QColor, QFont, QIcon, QPainter, QPen, QPixmap
+from PySide6.QtCore import Qt, QTimer, QUrl, QSize
+from PySide6.QtGui import QAction, QColor, QFont, QIcon, QPainter, QPen, QPixmap, QDesktopServices
 from PySide6.QtNetwork import QLocalServer, QLocalSocket
 from PySide6.QtWidgets import (
     QApplication, QFileDialog, QFrame, QHBoxLayout, QLabel, QMainWindow,
     QMenu, QMessageBox, QProgressBar, QPushButton, QSystemTrayIcon,
-    QTextEdit, QVBoxLayout, QWidget,
+    QTextEdit, QVBoxLayout, QWidget, QAbstractButton, QScrollArea, QDialog,
 )
 
-from .core import data_directory, load_path, save_path, validate_apk
+from .core import data_directory, load_path, save_path, validate_apk, load_adb_path, save_setting
+from .adb import find_adb, PLATFORM_TOOLS_URL
 from .worker import TransferWorker
+from . import __version__
 
 STYLE = """
 QMainWindow, QWidget#root { background: #F5F7FB; }
@@ -75,13 +77,39 @@ def label(text: str, name: str = "", wrap=False) -> QLabel:
     return result
 
 
+class ToggleSwitch(QAbstractButton):
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setCheckable(True)
+        self.setFixedSize(46, 26)
+        self.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
+
+    def sizeHint(self):
+        return QSize(46, 26)
+
+    def paintEvent(self, event):
+        painter = QPainter(self)
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+        painter.setPen(Qt.PenStyle.NoPen)
+        painter.setBrush(QColor("#3473EF" if self.isChecked() else "#C4CDD9"))
+        painter.drawRoundedRect(1, 1, 44, 24, 12, 12)
+        painter.setBrush(QColor("white"))
+        painter.drawEllipse(24 if self.isChecked() else 4, 4, 18, 18)
+        if self.hasFocus():
+            painter.setPen(QPen(QColor("#8AABF3"), 1))
+            painter.setBrush(Qt.BrushStyle.NoBrush)
+            painter.drawRoundedRect(0, 0, 45, 25, 12, 12)
+
+
 class MainWindow(QMainWindow):
     def __init__(self, start_worker=True):
         super().__init__()
-        self.setWindowTitle("APK 送达 · PDA 自动传输")
+        self.setWindowTitle(f"APK 送达 v{__version__} · PDA 传输与安装")
         self.setWindowIcon(app_icon())
-        self.resize(790, 750)
-        self.setMinimumSize(700, 720)
+        available_height = QApplication.primaryScreen().availableGeometry().height()
+        self.resize(790, min(880, available_height - 50))
+        self.setMinimumSize(700, 620)
         self.apk_path = load_path()
         self.paused = False
         self.busy = False
@@ -96,16 +124,22 @@ class MainWindow(QMainWindow):
         self.worker.progress.connect(self.set_progress)
         self.worker.busy_changed.connect(self.set_busy)
         self.worker.record.connect(self.add_record)
+        self.worker.transfer_state.connect(self.transfer_result.setText)
+        self.worker.install_state.connect(self.set_install_state)
         if start_worker:
             self.worker.start()
 
     def build_ui(self):
         root = QWidget()
         root.setObjectName("root")
-        self.setCentralWidget(root)
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        scroll.setFrameShape(QFrame.Shape.NoFrame)
+        scroll.setWidget(root)
+        self.setCentralWidget(scroll)
         layout = QVBoxLayout(root)
-        layout.setContentsMargins(32, 28, 32, 22)
-        layout.setSpacing(18)
+        layout.setContentsMargins(28, 22, 28, 20)
+        layout.setSpacing(14)
         top = QHBoxLayout()
         icon = QLabel()
         icon.setPixmap(app_icon().pixmap(34, 34))
@@ -113,14 +147,14 @@ class MainWindow(QMainWindow):
         top.addSpacing(4)
         top.addWidget(label("APK 送达", "brand"))
         top.addStretch()
-        top.addWidget(label("USB  ·  自动传输", "badge"))
+        top.addWidget(label("USB  ·  传输与安装", "badge"))
         layout.addLayout(top)
 
         intro = QVBoxLayout()
         intro.setSpacing(7)
         intro.addWidget(label("PDA FILE DELIVERY", "eyebrow"))
         intro.addWidget(label("选好 APK，连接即传。", "headline"))
-        intro.addWidget(label("把安装包自动送到 PDA 的 Download 文件夹。", "muted"))
+        intro.addWidget(label("先送到 Download，再按你的选择自动安装。", "muted"))
         layout.addLayout(intro)
 
         self.status_card = QFrame()
@@ -188,7 +222,38 @@ class MainWindow(QMainWindow):
         destination.addStretch()
         destination.addWidget(label("内部存储  /  Download"))
         target_layout.addLayout(destination)
+        result_row = QHBoxLayout()
+        result_row.addWidget(label("传输结果", "muted"))
+        result_row.addStretch()
+        self.transfer_result = label("等待传输")
+        result_row.addWidget(self.transfer_result)
+        target_layout.addLayout(result_row)
         layout.addWidget(target_card)
+
+        install_card = QFrame()
+        install_card.setObjectName("card")
+        install_layout = QVBoxLayout(install_card)
+        install_layout.setContentsMargins(22, 16, 22, 16)
+        install_layout.setSpacing(9)
+        switch_row = QHBoxLayout()
+        switch_row.addWidget(label("03  /  自动安装", "section"))
+        switch_row.addStretch()
+        self.auto_switch = ToggleSwitch()
+        self.auto_switch.setAccessibleName("自动安装")
+        self.auto_switch.setToolTip("每次启动默认关闭；从下一次传输任务生效，进行中的安装会先完成")
+        self.auto_switch.toggled.connect(self.toggle_install)
+        switch_row.addWidget(self.auto_switch)
+        install_layout.addLayout(switch_row)
+        self.install_result = label("已关闭 · 仅传输 APK", "muted", True)
+        install_layout.addWidget(self.install_result)
+        help_row = QHBoxLayout()
+        help_row.addWidget(label("保留应用数据覆盖更新，需 USB 调试授权", "muted", True), 1)
+        self.adb_button = QPushButton("配置 ADB")
+        self.adb_button.setObjectName("link")
+        self.adb_button.clicked.connect(self.configure_adb)
+        help_row.addWidget(self.adb_button)
+        install_layout.addLayout(help_row)
+        layout.addWidget(install_card)
 
         actions = QHBoxLayout()
         self.pause_button = QPushButton("暂停自动传输")
@@ -285,6 +350,58 @@ class MainWindow(QMainWindow):
         self.worker.command("pause", self.paused)
         self.update_actions()
 
+    def toggle_install(self, enabled):
+        self.worker.command("auto_install", enabled)
+        self.set_install_state("ready" if enabled else "off",
+                               "已开启 · 从下一次传输任务生效" if enabled else "已关闭 · 仅传输 APK")
+        self.add_record("自动安装已开启，从下一次传输任务生效" if enabled else "自动安装已关闭")
+
+    def set_install_state(self, state, detail):
+        self.install_result.setText(detail[:220])
+        self.install_result.setToolTip(detail)
+        color = {"success": "#1C9766", "error": "#C3634D", "waiting": "#AE812B",
+                 "installing": "#3473EF", "ready": "#3473EF"}.get(state, "#758198")
+        self.install_result.setStyleSheet(f"color: {color};")
+
+    def configure_adb(self):
+        dialog = QDialog(self)
+        dialog.setWindowTitle("配置 Android ADB 工具")
+        dialog.setMinimumWidth(510)
+        layout = QVBoxLayout(dialog)
+        layout.setContentsMargins(24, 24, 24, 24)
+        layout.setSpacing(16)
+        layout.addWidget(label("选择官方 Platform-Tools 中的 adb.exe", "filename"))
+        layout.addWidget(label("下载并完整解压工具包，保留 adb.exe 旁边的 DLL。\nPDA 需开启 USB 调试，并允许这台电脑连接。", "muted", True))
+        current = find_adb(load_adb_path())
+        current_label = label(current or "暂未找到 ADB，请下载后选择", "muted", True)
+        current_label.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
+        layout.addWidget(current_label)
+        download = QPushButton("打开官方下载页面")
+        download.clicked.connect(lambda: QDesktopServices.openUrl(QUrl(PLATFORM_TOOLS_URL)))
+        layout.addWidget(download)
+        choose = QPushButton("选择 adb.exe")
+        choose.setObjectName("primary")
+
+        def select_adb():
+            path, _ = QFileDialog.getOpenFileName(dialog, "选择 adb.exe", str(Path(current).parent) if current else "", "Android 调试工具 (adb.exe)")
+            if not path:
+                return
+            if Path(path).name.casefold() != "adb.exe" or not Path(path).is_file():
+                QMessageBox.warning(dialog, "工具无效", "请选择官方 Platform-Tools 文件夹里的 adb.exe")
+                return
+            try:
+                save_setting("adb_path", path)
+            except OSError:
+                QMessageBox.warning(dialog, "无法保存", "请检查当前用户的数据目录权限")
+                return
+            self.worker.command("adb_path", path)
+            self.add_record("已配置 ADB，正在等待的安装任务会继续检查连接")
+            dialog.accept()
+
+        choose.clicked.connect(select_adb)
+        layout.addWidget(choose)
+        dialog.exec()
+
     def set_status(self, state, title, detail):
         self.status_title.setText(title)
         self.status_detail.setText(detail)
@@ -298,15 +415,15 @@ class MainWindow(QMainWindow):
         self.status_card.setStyleSheet(f"QFrame#status {{background:{background};border:1px solid {border};border-radius:16px;}}")
         self.status_dot.setStyleSheet(f"color:{accent};font-size:20px;")
         self.tray.setToolTip(f"APK 送达 · {title}")
-        if state != "copying":
+        if state not in ("copying", "installing"):
             self.progress_bar.setRange(0, 100)
-            self.progress_bar.setValue(100 if state == "success" else 0)
-            self.percent.setText("完成" if state == "success" else "")
+            self.progress_bar.setValue(100 if state in ("success", "waiting_install") else 0)
+            self.percent.setText("完成" if state == "success" else "已传输" if state == "waiting_install" else "")
         else:
             self.progress_bar.setRange(0, 0)
             self.percent.setText("")
         if state == "success" and not self.isVisible():
-            self.tray.showMessage("APK 已送达", "安装包已保存到 PDA 的 Download 文件夹", QSystemTrayIcon.MessageIcon.Information, 3500)
+            self.tray.showMessage(title, detail, QSystemTrayIcon.MessageIcon.Information, 3500)
         self.refresh_file()
         self.update_actions()
 
@@ -321,10 +438,12 @@ class MainWindow(QMainWindow):
 
     def update_actions(self):
         self.choose_button.setEnabled(not self.busy and not self.quitting)
+        self.auto_switch.setEnabled(not self.quitting)
+        self.adb_button.setEnabled(not self.busy and not self.quitting)
         self.send_button.setEnabled(not self.busy and not self.paused and not self.quitting
                                     and self.device_name != "尚未连接" and validate_apk(self.apk_path) is None
                                     and not self.worker.policy.path_lost)
-        self.send_button.setText("正在传输…" if self.busy else "立即传输")
+        self.send_button.setText("正在处理…" if self.busy else "立即传输")
 
     def set_progress(self, sent, total):
         self.progress_bar.setRange(0, 100)
@@ -381,19 +500,22 @@ def main():
     logging.basicConfig(level=logging.INFO, handlers=[handler], format="%(asctime)s %(levelname)s %(message)s")
     app = QApplication(sys.argv)
     app.setApplicationName("APK 送达")
+    app.setApplicationVersion(__version__)
     app.setOrganizationName("Qzz")
     app.setStyle("Fusion")
     app.setFont(QFont("Microsoft YaHei UI", 10))
     app.setStyleSheet(STYLE)
     app.setQuitOnLastWindowClosed(False)
+    # Allow isolated packaging tests without interacting with a user's running app.
+    session_name = os.environ.get("QZZ_APK_PLACER_SESSION", "QzzApkPlacer.v1")
     socket = QLocalSocket()
-    socket.connectToServer("QzzApkPlacer.v1")
+    socket.connectToServer(session_name)
     if socket.waitForConnected(600):
         socket.write(b"show")
         socket.waitForBytesWritten(600)
         return 0
     server = QLocalServer()
-    if not server.listen("QzzApkPlacer.v1"):
+    if not server.listen(session_name):
         QMessageBox.warning(None, "无法启动", "无法创建程序服务，请确认程序是否已在托盘运行")
         return 1
     window = MainWindow()

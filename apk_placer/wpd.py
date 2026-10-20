@@ -14,6 +14,7 @@ import comtypes.client
 from comtypes import GUID
 
 from .core import Device
+from .usb_identity import usb_serials
 
 API = comtypes.client.GetModule("PortableDeviceApi.dll")
 TYPES = comtypes.client.GetModule("PortableDeviceTypes.dll")
@@ -33,6 +34,7 @@ FORMAT, CONTENT = key(OBJECT, 6), key(OBJECT, 7)
 SIZE, FILENAME = key(OBJECT, 11), key(OBJECT, 12)
 STORAGE_TYPE = key("{01A3057A-74D6-4E80-BEA7-DC4C212CE50A}", 2)
 CATEGORY = key("{8F052D93-ABCA-4FC5-A5AC-B01DF4DBE598}", 2)
+SERIAL = key("{26D4979A-E643-4626-9E2B-736DC0C92FDC}", 9)
 FOLDER = GUID("{27E2E392-A111-48E0-AB0C-E17705A05F85}")
 GENERIC_FILE = GUID("{0085E0A6-8D34-45D7-BC5C-447E59C73D48}")
 UNSPECIFIED = GUID("{30000000-AE6C-4804-98BA-C5B746965FE7}")
@@ -95,7 +97,7 @@ class WpdBackend:
                     name = buffer.value
                 except comtypes.COMError:
                     name = "PDA / Android 设备"
-                result.append(Device(device_id, name))
+                result.append(Device(device_id, name, usb_serials(device_id)))
             return result
         finally:
             for pointer in pointers:
@@ -146,6 +148,12 @@ class WpdSession:
 
     def values(self, object_id: str):
         return self.properties.GetValues(object_id, self.keys)
+
+    def serial_number(self) -> str:
+        keys = comtypes.client.CreateObject(TYPES.PortableDeviceKeyCollection,
+                                            interface=API.IPortableDeviceKeyCollection)
+        keys.Add(SERIAL)
+        return optional(lambda: string_value(self.properties.GetValues("DEVICE", keys), SERIAL), "").strip()
 
     def name(self, values):
         return optional(lambda: string_value(values, FILENAME), "") or string_value(values, NAME)

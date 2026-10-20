@@ -9,7 +9,10 @@
 | comtypes | 1.4.17 | Windows COM 调用 | [comtypes](https://github.com/enthought/comtypes)，MIT |
 | PyInstaller | 6.22.3 | 构建工具 | [License and exception](https://pyinstaller.org/en/stable/license.html) |
 | Windows Portable Devices | 随 Windows 提供 | USB 便携设备接口 | [Microsoft WPD](https://learn.microsoft.com/en-us/windows/win32/wpd_sdk/windows-portable-devices) |
+| Android SDK Platform-Tools / ADB | 使用者配置的版本 | 可选自动安装 | [官方下载与条款](https://developer.android.com/tools/releases/platform-tools) |
 
 项目运行依赖的固定版本见 `requirements.txt`，构建工具版本见 `build.ps1`。发布包采用目录分发形式，Qt/PySide6 动态库保留在 `_internal` 中。
+
+ADB 是可选外部工具，程序 ZIP 不捆绑 Android SDK Platform-Tools；用户可通过程序中的官方入口下载并选择完整工具包。
 
 随包附带的第三方许可证文本位于 [licenses](licenses/README.md)。Qt for Python 的对应源码可从 [官方版本标签](https://github.com/pyside/pyside-setup/tags) 获取，Qt 的源码入口为 [Qt Base](https://github.com/qt/qtbase)。

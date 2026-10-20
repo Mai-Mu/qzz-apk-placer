@@ -6,6 +6,8 @@
 
 一个为 Android PDA 批量交付场景准备的 Windows 小工具。选择电脑上的安装包，接入一台 PDA，自动送到内部存储的 `Download` 文件夹。
 
+v1.1.0 起支持可选的 ADB 自动安装：每次启动默认关闭，开启后先传输再安装。自动安装需使用 v1.1.0 或更新版本的程序或源码。
+
 [下载 Windows 版](https://github.com/Mai-Mu/qzz-apk-placer/releases/latest) · [使用说明](docs/USER_GUIDE.md) · [开发与构建](docs/DEVELOPMENT.md) · [更新记录](CHANGELOG.md)
 
 ![Windows](https://img.shields.io/badge/platform-Windows%20x64-3473EF)
@@ -24,18 +26,19 @@
 - **重新选择即传**：设备仍连接时，更换有效 APK 后立即传输；也可点击「立即传输」手动重传。
 - **托盘后台运行**：关闭窗口后继续等待接入，从右下角托盘恢复、暂停或退出。
 - **清楚的状态反馈**：显示设备、进度、结果和本次运行记录；临时失败会稍后重试。
+- **可选自动安装**：开关每次启动默认关闭；开启后对下一次传输任务执行安装，保留应用数据覆盖更新。等待调试授权时保留已传输的结果，不重复复制。
 
-程序通过 Windows 原生 WPD/MTP 接口传输文件，沿用资源管理器中的 USB 文件传输方式，无需 ADB 或 USB 调试。当前按**一次连接一台 PDA**设计。
+程序通过 Windows 原生 WPD/MTP 接口传输文件。仅传输时无需 ADB 或 USB 调试；启用自动安装时需配置 Android ADB 并授权电脑。当前按**一次连接一台 PDA**设计。
 
 ## 下载和使用
 
 1. 打开 [最新版本](https://github.com/Mai-Mu/qzz-apk-placer/releases/latest)，下载名称以 `windows-x64.zip` 结尾的压缩包。
-2. 解压整个压缩包，双击文件夹内的 `QzzApkPlacer.exe`。请保留旁边的 `_internal` 文件夹，无需另装 Python。
+2. 解压整个压缩包，双击文件夹内的 `QzzApkPlacer.exe`。请保留旁边的 `_internal` 文件夹，无需另装 Python。升级时先从旧版托盘菜单退出程序，再运行新版。
 3. 点击「选择 APK」，指定电脑上的安装包。
 4. 用支持数据传输的 USB 线连接 PDA，解锁设备并选择 **文件传输 / MTP**。
 5. 等待显示「APK 已送达」，到 PDA 的 `Download` 文件夹打开安装包。
 
-仅负责传输文件，应用安装仍在 PDA 上操作。使用过程中可依次拔插不同的设备。
+默认只传输文件，应用安装可在 PDA 上操作。需要自动安装时，先准备 [官方 Platform-Tools](https://developer.android.com/tools/releases/platform-tools)，通过「配置 ADB」指定完整工具包中的 `adb.exe`，再开启界面中的自动安装开关。若本次传输已完成，点击「立即传输」执行新的传输与安装任务。
 
 ## 传输规则
 
@@ -50,6 +53,10 @@
 | 传输失败 | 约 10 秒后重试，也可手动重试 |
 | 识别到多个 USB 便携设备 | 暂停，保留一台目标设备后继续 |
 | 不能确定内部存储 | 停止本次传输并提示 |
+| 自动安装关闭 | 只传输 APK；每次启动均恢复为关闭 |
+| 开关由关闭改为开启 | 下一次传输任务生效，已完成任务不追溯安装 |
+| 已传输，但调试连接或授权未就绪 | 保留稳定副本并等待，条件就绪后继续安装 |
+| 安装签名冲突、降级被拒绝或其他安装失败 | 显示原因，保留传输结果，不自动卸载、不无限重试安装 |
 
 覆盖期间请保持连接，等显示成功再拔线。传输前会生成稳定的本地副本，写入提交完成并核对设备文件大小后才显示成功。
 
@@ -70,7 +77,7 @@ python -m venv .venv
 ## 开发与验证
 
 ```powershell
-# 运行 14 项单元与流程测试
+# 运行单元与流程测试
 python -m unittest discover -s tests -v
 
 # 构建 Windows 可执行程序
@@ -80,7 +87,7 @@ powershell -ExecutionPolicy Bypass -File .\build.ps1
 python scripts/package_release.py
 ```
 
-当前版本已通过自动化测试、界面与托盘检查，以及 IT-400i 设备上的文件传输、同名覆盖和 SHA-256 读回验证。详见 [TESTING.md](TESTING.md)。
+当前版本通过 39 项单元与流程测试、界面与托盘检查，并在 IT-400i（Android 9）上验证了传输后自动安装、覆盖更新后的私有数据保留，以及降级和签名冲突的失败处理。完整范围见 [TESTING.md](TESTING.md)。
 
 ## 常见问题
 

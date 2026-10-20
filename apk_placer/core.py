@@ -10,6 +10,8 @@ from pathlib import Path
 
 
 def data_directory() -> Path:
+    if os.environ.get("QZZ_APK_PLACER_DATA_DIR"):
+        return Path(os.environ["QZZ_APK_PLACER_DATA_DIR"]).resolve()
     return Path(os.environ.get("LOCALAPPDATA", str(Path.home()))) / "QzzApkPlacer"
 
 
@@ -21,10 +23,28 @@ def load_path() -> str:
 
 
 def save_path(path: str) -> None:
+    save_setting("apk_path", path)
+
+
+def load_adb_path() -> str:
+    try:
+        return str(json.loads((data_directory() / "settings.json").read_text("utf-8")).get("adb_path", ""))
+    except (OSError, ValueError, TypeError, AttributeError):
+        return ""
+
+
+def save_setting(name: str, value: str) -> None:
     directory = data_directory()
     directory.mkdir(parents=True, exist_ok=True)
+    try:
+        settings = json.loads((directory / "settings.json").read_text("utf-8"))
+        if not isinstance(settings, dict):
+            settings = {}
+    except (OSError, ValueError):
+        settings = {}
+    settings[name] = value
     temporary = directory / "settings.tmp"
-    temporary.write_text(json.dumps({"apk_path": path}, ensure_ascii=False), "utf-8")
+    temporary.write_text(json.dumps(settings, ensure_ascii=False), "utf-8")
     temporary.replace(directory / "settings.json")
 
 
@@ -77,6 +97,7 @@ class Snapshot:
 class Device:
     id: str
     name: str
+    serials: tuple[str, ...] = ()
 
 
 class DeliveryPolicy:
