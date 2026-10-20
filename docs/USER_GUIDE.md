@@ -10,7 +10,7 @@
 
 ## 配置 APK 列表
 
-1. 完整解压 Windows 程序 ZIP，保留 `_internal` 文件夹，运行 `QzzApkPlacer.exe`。升级时先从旧版托盘退出旧程序。
+1. 完整解压 Windows 程序 ZIP，保留 `_internal` 和 `platform-tools` 文件夹，运行 `QzzApkPlacer.exe`。升级时先从旧版托盘退出旧程序。
 2. 点击「添加 APK」多选文件，也可分次从不同目录添加。
 3. 选中行后可「替换」「移除」「上移」「下移」。顺序也是后续安装顺序。
 4. 点击「应用列表」保存并正式生效。设备已连接时立即开始新批次；未连接时等待接入。
@@ -40,10 +40,11 @@
 
 开关每次启动默认关闭，开启后从下一批任务生效，不会追溯安装已经结束批次的文件。
 
-1. 从 [Android 官方页面](https://developer.android.com/tools/releases/platform-tools) 下载并完整解压 Windows Platform-Tools。
-2. 点击「配置 ADB」选择 `adb.exe`，保留同目录的 DLL。程序也会查找程序旁或应用数据目录中的 `platform-tools`、Android SDK 与 PATH。
-3. 在设备开发者选项中开启 USB 调试，首次连接时允许这台电脑。
-4. 开启自动安装后应用列表或点击「立即处理整批」。
+1. v1.2.1 起，Windows 便携包的 `platform-tools` 已包含官方 ADB 及必需 DLL，无需下载或手动选择工具。
+2. 在设备开发者选项中开启 USB 调试，首次连接时允许这台电脑。
+3. 开启自动安装后应用列表或点击「立即处理整批」。
+
+程序始终优先使用完整的包内 ADB，升级前保存的其他软件工具路径作为备用，移动整个程序文件夹后仍能自动找到内置工具。点击「配置 ADB」可查看当前使用的路径。若内置文件被删除，请重新完整解压便携包；也可从 [Android 官方页面](https://developer.android.com/tools/releases/platform-tools) 下载并解压后选择备用 `adb.exe`，保留其旁边的 DLL。仅当包内工具不完整时，程序才使用备用路径、Android SDK 或 PATH 中的工具。
 
 已传完但尚未授权时，保留本批次稳定副本，等待授权后继续安装，不重复传文件。重新应用列表或手动开始新批次会取消旧批次尚未完成的项目。
 
@@ -71,7 +72,7 @@
 | 托盘菜单退出 | 取消等待，待设备调用结束后退出 |
 | 传输记录 | 查看各项处理及批次汇总 |
 
-Windows 程序未签名，下载时可核对 Release 附件中的 SHA-256 值。ADB 为单独下载的可选工具，程序 ZIP 不捆绑 SDK。
+Windows 程序未签名，下载时可核对 Release 附件中的 SHA-256 值。包内仅附带安装所需的 ADB、两个 DLL 及原始第三方声明，不包含完整 Android SDK。
 
 ## 设置与日志
 

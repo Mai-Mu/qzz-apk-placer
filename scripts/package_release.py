@@ -7,6 +7,11 @@ import re
 import shutil
 import zipfile
 
+try:
+    from .bundle_adb import verify_bundle
+except ImportError:
+    from bundle_adb import verify_bundle
+
 ROOT = Path(__file__).resolve().parents[1]
 SOURCE_ITEMS = (
     "apk_placer", "tests", "assets", "docs", "scripts", "main.py",
@@ -22,6 +27,7 @@ def package():
     binary = ROOT / "dist" / "QzzApkPlacer"
     if not (binary / "QzzApkPlacer.exe").is_file() or not (binary / "_internal").is_dir():
         raise FileNotFoundError("Build first: powershell -ExecutionPolicy Bypass -File .\\build.ps1")
+    verify_bundle(binary / "platform-tools")
     release = ROOT / "release"
     release.mkdir(exist_ok=True)
     for name in ("README.md", "TESTING.md", "THIRD_PARTY.md", "CHANGELOG.md", "VERSION"):

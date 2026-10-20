@@ -16,10 +16,21 @@ from .core import data_directory
 PLATFORM_TOOLS_URL = "https://developer.android.com/tools/releases/platform-tools"
 
 
-def find_adb(configured: str = "") -> str:
+def bundled_adb() -> str:
+    """Prefer the complete portable bundle, including after moving its folder."""
     base = Path(sys.executable).parent if getattr(sys, "frozen", False) else Path(__file__).resolve().parents[1]
+    directory = base / "platform-tools"
+    if all((directory / name).is_file() for name in ("adb.exe", "AdbWinApi.dll", "AdbWinUsbApi.dll")):
+        return str((directory / "adb.exe").resolve())
+    return ""
+
+
+def find_adb(configured: str = "") -> str:
+    included = bundled_adb()
+    if included:
+        return included
     candidates = [Path(configured)] if configured else []
-    candidates += [base / "platform-tools" / "adb.exe", data_directory() / "platform-tools" / "adb.exe"]
+    candidates.append(data_directory() / "platform-tools" / "adb.exe")
     for variable in ("ANDROID_HOME", "ANDROID_SDK_ROOT"):
         if os.environ.get(variable):
             candidates.append(Path(os.environ[variable]) / "platform-tools" / "adb.exe")

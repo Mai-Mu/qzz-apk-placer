@@ -6,7 +6,7 @@
 
 一个为 Android Pad / PDA 交付场景准备的 Windows 小工具。配置电脑上的 APK 列表，接入一台设备，先全部传到内部存储的 `Download`，再按需逐个安装。
 
-v1.2.0 新增多 APK 列表：添加多少就处理多少，可排序、逐项查看结果。多 APK 功能需要 v1.2.0 或更新版本；自动安装每次启动默认关闭。
+v1.2.1 便携包已内置官方 ADB，无需另外下载或配置。支持多 APK 列表：添加多少就处理多少，可排序、逐项查看结果；自动安装每次启动默认关闭。
 
 [下载 Windows 版](https://github.com/Mai-Mu/qzz-apk-placer/releases/latest) · [使用说明](docs/USER_GUIDE.md) · [开发与构建](docs/DEVELOPMENT.md) · [更新记录](CHANGELOG.md)
 
@@ -28,17 +28,17 @@ v1.2.0 新增多 APK 列表：添加多少就处理多少，可排序、逐项�
 - **清楚的状态反馈**：显示设备、单项进度与结果、失败原因和整批汇总。
 - **可选自动安装**：开关每次启动默认关闭，对下一批任务生效；保留应用数据覆盖更新，等待授权时不重复复制。
 
-程序通过 Windows 原生 WPD/MTP 接口传输文件。仅传输时无需 ADB 或 USB 调试；启用自动安装时需配置 Android ADB 并授权电脑。当前按**一次连接一台 PDA**设计。
+程序通过 Windows 原生 WPD/MTP 接口传输文件。仅传输时无需 USB 调试；启用自动安装时自动使用包内 ADB，设备需开启 USB 调试并授权电脑。当前按**一次连接一台 PDA**设计。
 
 ## 下载和使用
 
 1. 打开 [最新版本](https://github.com/Mai-Mu/qzz-apk-placer/releases/latest)，下载名称以 `windows-x64.zip` 结尾的压缩包。
-2. 解压整个压缩包，双击文件夹内的 `QzzApkPlacer.exe`。请保留旁边的 `_internal` 文件夹，无需另装 Python。升级时先从旧版托盘菜单退出程序，再运行新版。
+2. 解压整个压缩包，双击文件夹内的 `QzzApkPlacer.exe`。请保留旁边的 `_internal` 和 `platform-tools` 文件夹，无需另装 Python 或 ADB。升级时先从旧版托盘菜单退出程序，再运行新版。
 3. 点击「添加 APK」选择一个或多个安装包，也可以分次从不同目录添加；按需要排序后点击「应用列表」。
 4. 用支持数据传输的 USB 线连接 Pad / PDA，解锁设备并选择 **文件传输 / MTP**。
 5. 等待批次结束，检查每行的传输、安装结果及顶部汇总；未启用自动安装时可在设备的 Download 中打开安装包。
 
-默认只传输文件。需要自动安装时，先准备 [官方 Platform-Tools](https://developer.android.com/tools/releases/platform-tools)，通过「配置 ADB」选择 `adb.exe`，在设备上开启 USB 调试并授权电脑，再开启自动安装。已完成的批次不会因切换开关追溯安装，可点击「立即处理整批」开始新批次。
+默认只传输文件。需要自动安装时，在设备上开启 USB 调试并授权电脑，再开启自动安装，无需手动配置 ADB。程序优先使用包内官方 ADB，不依赖其他软件附带的工具或旧版保存的路径；「配置 ADB」可查看当前工具路径并设置备用路径。已完成的批次不会因切换开关追溯安装，可点击「立即处理整批」开始新批次。
 
 ## 传输规则
 
@@ -89,7 +89,7 @@ powershell -ExecutionPolicy Bypass -File .\build.ps1
 python scripts/package_release.py
 ```
 
-60 项自动化测试通过。LZT-101A（Android 13）实测两个 APK 先传完再安装，以及第一个签名冲突失败后第二个继续更新、私有数据保留。完整范围见 [TESTING.md](TESTING.md)。历史 v1.1.0 另在 IT-400i（Android 9）验证过单 APK 安装与更新。
+67 项自动化测试通过，包含内置工具优先级、移动目录和发布包完整性检查。v1.2.0 在 LZT-101A（Android 13）实测两个 APK 先传完再安装，以及第一个签名冲突失败后第二个继续更新、私有数据保留。完整范围见 [TESTING.md](TESTING.md)。历史 v1.1.0 另在 IT-400i（Android 9）验证过单 APK 安装与更新。
 
 ## 常见问题
 

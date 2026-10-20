@@ -79,10 +79,43 @@ adb-ABC._adb-tls-connect._tcp device
             self.assertEqual(load_adb_path(), "C:/工具/adb.exe")
 
     def test_configured_adb_discovered(self):
-        with tempfile.TemporaryDirectory() as directory:
+        with tempfile.TemporaryDirectory() as directory, patch("apk_placer.adb.bundled_adb", return_value=""):
             executable = Path(directory) / "adb.exe"
             executable.write_bytes(b"test fixture")
             self.assertEqual(find_adb(str(executable)), str(executable.resolve()))
+
+    def test_portable_adb_overrides_old_saved_and_environment_paths(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            included = root / "platform-tools"
+            included.mkdir()
+            for name in ("adb.exe", "AdbWinApi.dll", "AdbWinUsbApi.dll"):
+                (included / name).write_bytes(b"fixture")
+            old = root / "old-adb.exe"
+            old.write_bytes(b"old fixture")
+            with patch("apk_placer.adb.sys.frozen", True, create=True), patch("apk_placer.adb.sys.executable", str(root / "App.exe")), patch("apk_placer.adb.shutil.which") as lookup:
+                self.assertEqual(find_adb(str(old)), str((included / "adb.exe").resolve()))
+                lookup.assert_not_called()
+
+    def test_incomplete_portable_adb_uses_configured_fallback(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / "platform-tools").mkdir()
+            (root / "platform-tools/adb.exe").write_bytes(b"fixture")
+            fallback = root / "external-adb.exe"
+            fallback.write_bytes(b"fixture")
+            with patch("apk_placer.adb.sys.frozen", True, create=True), patch("apk_placer.adb.sys.executable", str(root / "App.exe")):
+                self.assertEqual(find_adb(str(fallback)), str(fallback.resolve()))
+
+    def test_portable_adb_follows_moved_program_in_unicode_directory(self):
+        with tempfile.TemporaryDirectory() as directory:
+            for name in ("before", "移动后的程序"):
+                root = Path(directory) / name
+                (root / "platform-tools").mkdir(parents=True)
+                for filename in ("adb.exe", "AdbWinApi.dll", "AdbWinUsbApi.dll"):
+                    (root / "platform-tools" / filename).write_bytes(b"fixture")
+                with patch("apk_placer.adb.sys.frozen", True, create=True), patch("apk_placer.adb.sys.executable", str(root / "App.exe")):
+                    self.assertEqual(find_adb(), str((root / "platform-tools/adb.exe").resolve()))
 
 
 if __name__ == "__main__":

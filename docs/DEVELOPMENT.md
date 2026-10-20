@@ -25,6 +25,8 @@ apk_placer/
 assets/                   图标与界面预览
 docs/                     使用及开发文档
 scripts/package_release.py 版本压缩包与 SHA-256 校验文件
+scripts/bundle_adb.py      固定版本官方 ADB 下载、校验和提取
+scripts/adb-bundle.json    ADB 版本、官方来源和 SHA-256 清单
 tests/                    单元与流程测试
 main.py                   启动入口与启动异常记录
 build.ps1                 Windows 可执行程序构建
@@ -33,7 +35,7 @@ CHANGELOG.md              版本更新记录
 TESTING.md                已完成的验证与边界
 ```
 
-生成目录 `build/`、`dist/`、`release/` 和本地辅助目录 `.dev/` 均不进入 Git。客户 APK、个人设置和运行日志也不应提交。
+生成目录 `build/`、`dist/`、`release/`、`platform-tools/` 和本地辅助目录 `.dev/` 均不进入 Git。客户 APK、个人设置和运行日志也不应提交。
 
 ## 执行流程
 
@@ -71,7 +73,9 @@ python -m unittest discover -s tests -v
 powershell -ExecutionPolicy Bypass -File .\build.ps1
 ```
 
-构建脚本先生成 Windows 类型库包装，再使用 PyInstaller 的目录分发模式生成 `dist/QzzApkPlacer/`。COM 生成模块会一并打包，运行时无需安装 Python。
+构建脚本首先从 Google 固定版本地址下载 ADB 并核对 ZIP 与各文件 SHA-256，再生成 Windows 类型库包装，使用 PyInstaller 的目录分发模式生成 `dist/QzzApkPlacer/`，最后放入 `platform-tools/`。COM 生成模块会一并打包，运行时无需安装 Python 或额外下载 ADB。已校验的本地 ADB 可直接复用；首次构建需要联网。
+
+源码运行如需相同内置工具，先执行 `python scripts/bundle_adb.py`。离线构建可提前下载清单中的官方 ZIP，并执行 `python scripts/bundle_adb.py --archive <ZIP路径>`；脚本仍严格校验哈希。只提取 ADB、所需 DLL、原始 NOTICE 和版本文件，不捆绑完整 SDK。运行时先按程序所在目录查找完整内置工具，再考虑保存的备用路径和环境中的工具；不将构建电脑的绝对路径写入发布包。
 
 脚本在打包步骤临时将 PATH 收窄为当前 Python 和 Windows 系统目录，完成后恢复。这样避免把其他软件附带的同名 DLL 带入发布包。不要手动向程序目录添加其他软件的 ICU 或系统运行库 DLL。
 
@@ -83,19 +87,19 @@ powershell -ExecutionPolicy Bypass -File .\build.ps1
 python scripts/package_release.py
 ```
 
-脚本使用现有 `dist/QzzApkPlacer/`，更新随包文档，不重新编译程序，输出：
+脚本使用现有 `dist/QzzApkPlacer/`，检查内置 ADB 和声明文件的 SHA-256，更新随包文档，不重新编译程序，输出：
 
 ```text
 release/
-  QzzApkPlacer-v1.2.0-windows-x64.zip
-  QzzApkPlacer-v1.2.0-source.zip
+  QzzApkPlacer-v1.2.1-windows-x64.zip
+  QzzApkPlacer-v1.2.1-source.zip
   SHA256SUMS.txt
 ```
 
 发布前确认现有 `dist` 与待发布源码版本对应。压缩包通过 ZIP 完整性检查，文件散列可用于验证下载文件。校验示例：
 
 ```powershell
-Get-FileHash .\QzzApkPlacer-v1.2.0-windows-x64.zip -Algorithm SHA256
+Get-FileHash .\QzzApkPlacer-v1.2.1-windows-x64.zip -Algorithm SHA256
 ```
 
 创建版本标签后，在 GitHub Releases 附加两个 ZIP 和 `SHA256SUMS.txt`。客户 APK、运行日志和本地设置不随包发布。

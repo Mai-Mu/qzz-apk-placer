@@ -1,5 +1,7 @@
 $ErrorActionPreference = 'Stop'
 Set-Location -LiteralPath $PSScriptRoot
+python scripts/bundle_adb.py
+if ($LASTEXITCODE -ne 0) { throw 'Bundled ADB preparation failed' }
 python -m pip install -r requirements.txt
 if ($LASTEXITCODE -ne 0) { throw 'Dependency installation failed' }
 python -m pip install 'pyinstaller==6.22.3'
@@ -19,4 +21,6 @@ try {
 } finally {
     $env:Path = $buildPreviousPath
 }
+python scripts/bundle_adb.py --destination dist/QzzApkPlacer/platform-tools
+if ($LASTEXITCODE -ne 0) { throw 'Bundled ADB copy failed' }
 Write-Host 'Ready: dist\QzzApkPlacer\QzzApkPlacer.exe'

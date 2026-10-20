@@ -473,8 +473,8 @@ class MainWindow(QMainWindow):
         layout = QVBoxLayout(dialog)
         layout.setContentsMargins(24, 24, 24, 24)
         layout.setSpacing(16)
-        layout.addWidget(label("选择官方 Platform-Tools 中的 adb.exe", "filename"))
-        layout.addWidget(label("下载并完整解压工具包，保留 adb.exe 旁边的 DLL。\nPDA 需开启 USB 调试，并允许这台电脑连接。", "muted", True))
+        layout.addWidget(label("便携版已内置 ADB，无需另外安装", "filename"))
+        layout.addWidget(label("优先使用程序旁 platform-tools 中的工具，旧版保存的路径作为备用。\n若内置文件缺失，请重新完整解压便携包，或选择官方工具。\n设备仍需开启 USB 调试，并允许这台电脑连接。", "muted", True))
         current = find_adb(load_adb_path())
         current_label = label(current or "暂未找到 ADB，请下载后选择", "muted", True)
         current_label.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
@@ -482,7 +482,7 @@ class MainWindow(QMainWindow):
         download = QPushButton("打开官方下载页面")
         download.clicked.connect(lambda: QDesktopServices.openUrl(QUrl(PLATFORM_TOOLS_URL)))
         layout.addWidget(download)
-        choose = QPushButton("选择 adb.exe")
+        choose = QPushButton("选择备用 adb.exe")
         choose.setObjectName("primary")
 
         def select_adb():
@@ -498,7 +498,7 @@ class MainWindow(QMainWindow):
                 QMessageBox.warning(dialog, "无法保存", "请检查当前用户的数据目录权限")
                 return
             self.worker.command("adb_path", path)
-            self.add_record("已配置 ADB，正在等待的安装任务会继续检查连接")
+            self.add_record("已保存备用 ADB 路径；内置工具可用时仍优先使用内置版本")
             dialog.accept()
 
         choose.clicked.connect(select_adb)
