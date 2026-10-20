@@ -16,14 +16,59 @@ def data_directory() -> Path:
 
 
 def load_path() -> str:
+    paths = load_paths()
+    return paths[0] if paths else ""
+
+
+def load_paths() -> list[str]:
     try:
-        return str(json.loads((data_directory() / "settings.json").read_text("utf-8"))["apk_path"])
-    except (OSError, ValueError, KeyError, TypeError):
-        return ""
+        settings = json.loads((data_directory() / "settings.json").read_text("utf-8"))
+        if "apk_paths" in settings:
+            values = settings["apk_paths"]
+            return unique_paths(values) if isinstance(values, list) and all(isinstance(p, str) for p in values) else []
+        legacy = settings.get("apk_path", "")
+        return [legacy] if isinstance(legacy, str) and legacy else []
+    except (OSError, ValueError, TypeError, AttributeError):
+        return []
 
 
 def save_path(path: str) -> None:
-    save_setting("apk_path", path)
+    save_paths([path] if path else [])
+
+
+def save_paths(paths: list[str]) -> None:
+    save_setting("apk_paths", unique_paths(paths))
+
+
+def path_identity(path: str) -> str:
+    return os.path.normcase(str(Path(path).resolve()))
+
+
+def unique_paths(paths: list[str]) -> list[str]:
+    seen, result = set(), []
+    for path in paths:
+        identity = path_identity(path)
+        if identity not in seen:
+            result.append(path)
+            seen.add(identity)
+    return result
+
+
+def list_errors(paths: list[str]) -> dict[str, str]:
+    if not paths:
+        return {"": "请添加至少一个 APK 并应用列表"}
+    errors = {}
+    names = {}
+    for path in paths:
+        error = validate_apk(path)
+        if error:
+            errors[path] = error
+        name = Path(path).name.casefold()
+        if name in names and path_identity(names[name]) != path_identity(path):
+            message = f"文件名冲突：{Path(path).name}，请先重命名其中一个"
+            errors[path] = errors[names[name]] = message
+        names[name] = path
+    return errors
 
 
 def load_adb_path() -> str:
@@ -33,7 +78,7 @@ def load_adb_path() -> str:
         return ""
 
 
-def save_setting(name: str, value: str) -> None:
+def save_setting(name: str, value: str | list[str]) -> None:
     directory = data_directory()
     directory.mkdir(parents=True, exist_ok=True)
     try:
@@ -104,7 +149,7 @@ class DeliveryPolicy:
     """One successful transfer per physical connection; retry transient failures."""
 
     def __init__(self):
-        self.path = ""
+        self.paths: list[str] = []
         self.present: set[str] = set()
         self.completed: set[str] = set()
         self.retry_after = 0.0
@@ -112,8 +157,16 @@ class DeliveryPolicy:
         self.paused = False
         self.path_lost = False
 
-    def select(self, path: str):
-        self.path = path
+    @property
+    def path(self) -> str:
+        return self.paths[0] if self.paths else ""
+
+    @path.setter
+    def path(self, value: str):
+        self.paths = [value] if value else []
+
+    def select(self, paths: str | list[str]):
+        self.paths = unique_paths([paths] if isinstance(paths, str) else paths)
         self.path_lost = False
         self.completed.clear()
         self.retry_after = 0

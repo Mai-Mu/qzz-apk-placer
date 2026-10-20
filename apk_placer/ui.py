@@ -13,9 +13,10 @@ from PySide6.QtWidgets import (
     QApplication, QFileDialog, QFrame, QHBoxLayout, QLabel, QMainWindow,
     QMenu, QMessageBox, QProgressBar, QPushButton, QSystemTrayIcon,
     QTextEdit, QVBoxLayout, QWidget, QAbstractButton, QScrollArea, QDialog,
+    QTableWidget, QTableWidgetItem, QHeaderView, QAbstractItemView,
 )
 
-from .core import data_directory, load_path, save_path, validate_apk, load_adb_path, save_setting
+from .core import data_directory, load_paths, save_paths, list_errors, unique_paths, path_identity, load_adb_path, save_setting
 from .adb import find_adb, PLATFORM_TOOLS_URL
 from .worker import TransferWorker
 from . import __version__
@@ -48,6 +49,10 @@ QTextEdit { background: white; border: 1px solid #E7EBF2; border-radius: 10px; p
 QMenu { background: white; border: 1px solid #E4E9F1; padding: 6px; }
 QMenu::item { padding: 8px 24px; }
 QMenu::item:selected { background: #EAF1FF; border-radius: 5px; }
+QTableWidget { background: #FFFFFF; border: 1px solid #E7EBF2; border-radius: 8px; gridline-color: #EEF1F6; selection-background-color: #EAF1FF; selection-color: #17243B; }
+QHeaderView::section { background: #F7F9FC; color: #758198; border: none; padding: 8px; font-size: 11px; }
+QTableWidget::item { padding: 7px; border-bottom: 1px solid #F0F3F8; }
+QPushButton#compact { padding: 6px 12px; font-size: 12px; }
 """
 
 
@@ -105,17 +110,19 @@ class ToggleSwitch(QAbstractButton):
 class MainWindow(QMainWindow):
     def __init__(self, start_worker=True):
         super().__init__()
-        self.setWindowTitle(f"APK 送达 v{__version__} · PDA 传输与安装")
+        self.setWindowTitle(f"APK 送达 v{__version__} · 多 APK 批量处理")
         self.setWindowIcon(app_icon())
         available_height = QApplication.primaryScreen().availableGeometry().height()
-        self.resize(790, min(880, available_height - 50))
-        self.setMinimumSize(700, 620)
-        self.apk_path = load_path()
+        self.resize(940, min(920, available_height - 50))
+        self.setMinimumSize(790, 620)
+        self.applied_paths = load_paths()
+        self.draft_paths = self.applied_paths[:]
+        self.item_results = {}
         self.paused = False
         self.busy = False
         self.device_name = "尚未连接"
         self.quitting = False
-        self.worker = TransferWorker(self.apk_path)
+        self.worker = TransferWorker(self.applied_paths)
         self.build_ui()
         self.setup_tray()
         self.refresh_file()
@@ -126,6 +133,7 @@ class MainWindow(QMainWindow):
         self.worker.record.connect(self.add_record)
         self.worker.transfer_state.connect(self.transfer_result.setText)
         self.worker.install_state.connect(self.set_install_state)
+        self.worker.results_changed.connect(self.set_results)
         if start_worker:
             self.worker.start()
 
@@ -147,14 +155,14 @@ class MainWindow(QMainWindow):
         top.addSpacing(4)
         top.addWidget(label("APK 送达", "brand"))
         top.addStretch()
-        top.addWidget(label("USB  ·  传输与安装", "badge"))
+        top.addWidget(label("USB  ·  多 APK 批量处理", "badge"))
         layout.addLayout(top)
 
         intro = QVBoxLayout()
         intro.setSpacing(7)
         intro.addWidget(label("PDA FILE DELIVERY", "eyebrow"))
-        intro.addWidget(label("选好 APK，连接即传。", "headline"))
-        intro.addWidget(label("先送到 Download，再按你的选择自动安装。", "muted"))
+        intro.addWidget(label("配好一份列表，整批送达。", "headline"))
+        intro.addWidget(label("先传完全部 APK，再按列表顺序安装。适用于 Android Pad / PDA。", "muted"))
         layout.addLayout(intro)
 
         self.status_card = QFrame()
@@ -171,7 +179,7 @@ class MainWindow(QMainWindow):
         self.percent = label("", "muted")
         row.addWidget(self.percent)
         status_layout.addLayout(row)
-        self.status_detail = label("准备就绪后，连接 PDA 即可自动传输", "muted", True)
+        self.status_detail = label("应用 APK 列表后，连接设备即可批量处理", "muted", True)
         status_layout.addWidget(self.status_detail)
         self.progress_bar = QProgressBar()
         self.progress_bar.setTextVisible(False)
@@ -184,27 +192,59 @@ class MainWindow(QMainWindow):
         file_card = QFrame()
         file_card.setObjectName("card")
         file_layout = QVBoxLayout(file_card)
-        file_layout.setContentsMargins(22, 17, 22, 18)
-        file_layout.setSpacing(11)
-        file_layout.addWidget(label("01  /  传输文件", "section"))
+        file_layout.setContentsMargins(18, 13, 18, 14)
+        file_layout.setSpacing(8)
         file_row = QHBoxLayout()
-        file_text = QVBoxLayout()
-        file_text.setSpacing(6)
-        self.filename = label("尚未选择 APK", "filename", True)
-        self.file_info = label("选择一次，自动记住", "muted")
-        file_text.addWidget(self.filename)
-        file_text.addWidget(self.file_info)
-        file_row.addLayout(file_text, 1)
-        self.choose_button = QPushButton("选择 APK")
+        self.file_count = label("01  /  APK 列表 · 0 项", "section")
+        file_row.addWidget(self.file_count)
+        file_row.addStretch()
+        self.choose_button = QPushButton("＋ 添加 APK")
+        self.choose_button.setObjectName("compact")
         self.choose_button.setCursor(Qt.CursorShape.PointingHandCursor)
         self.choose_button.clicked.connect(self.select_file)
         file_row.addWidget(self.choose_button)
         file_layout.addLayout(file_row)
-        self.path_label = label("支持电脑上的 .apk 文件", "muted", True)
-        self.path_label.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
-        file_layout.addWidget(self.path_label)
+        self.apk_table = QTableWidget(0, 4)
+        self.apk_table.setHorizontalHeaderLabels(["APK 文件", "本地路径", "传输", "安装"])
+        self.apk_table.verticalHeader().hide()
+        self.apk_table.setShowGrid(False)
+        self.apk_table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
+        self.apk_table.setSelectionMode(QAbstractItemView.SelectionMode.SingleSelection)
+        self.apk_table.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
+        self.apk_table.setTextElideMode(Qt.TextElideMode.ElideMiddle)
+        header = self.apk_table.horizontalHeader()
+        header.setSectionResizeMode(0, QHeaderView.ResizeMode.Interactive)
+        header.setSectionResizeMode(1, QHeaderView.ResizeMode.Stretch)
+        header.setSectionResizeMode(2, QHeaderView.ResizeMode.Fixed)
+        header.setSectionResizeMode(3, QHeaderView.ResizeMode.Fixed)
+        self.apk_table.setColumnWidth(0, 175)
+        self.apk_table.setColumnWidth(2, 115)
+        self.apk_table.setColumnWidth(3, 125)
+        self.apk_table.setFixedHeight(150)
+        self.apk_table.verticalHeader().setDefaultSectionSize(36)
+        self.apk_table.itemSelectionChanged.connect(self.update_actions)
+        file_layout.addWidget(self.apk_table)
+        edit_row = QHBoxLayout()
+        self.edit_buttons = []
+        for text, callback in (("替换", self.replace_file), ("移除", self.remove_file),
+                               ("上移", lambda: self.move_file(-1)), ("下移", lambda: self.move_file(1))):
+            button = QPushButton(text)
+            button.setObjectName("compact")
+            button.clicked.connect(callback)
+            self.edit_buttons.append(button)
+            edit_row.addWidget(button)
+        edit_row.addStretch()
+        self.apply_button = QPushButton("应用列表")
+        self.apply_button.setObjectName("primary")
+        self.apply_button.clicked.connect(self.apply_list)
+        edit_row.addWidget(self.apply_button)
+        file_layout.addLayout(edit_row)
+        self.list_hint = label("添加 APK 后点击「应用列表」，支持不同目录。", "muted", True)
+        file_layout.addWidget(self.list_hint)
         layout.addWidget(file_card)
 
+        details_row = QHBoxLayout()
+        details_row.setSpacing(14)
         target_card = QFrame()
         target_card.setObjectName("card")
         target_layout = QVBoxLayout(target_card)
@@ -228,7 +268,7 @@ class MainWindow(QMainWindow):
         self.transfer_result = label("等待传输")
         result_row.addWidget(self.transfer_result)
         target_layout.addLayout(result_row)
-        layout.addWidget(target_card)
+        details_row.addWidget(target_card, 1)
 
         install_card = QFrame()
         install_card.setObjectName("card")
@@ -253,15 +293,16 @@ class MainWindow(QMainWindow):
         self.adb_button.clicked.connect(self.configure_adb)
         help_row.addWidget(self.adb_button)
         install_layout.addLayout(help_row)
-        layout.addWidget(install_card)
+        details_row.addWidget(install_card, 1)
+        layout.addLayout(details_row)
 
         actions = QHBoxLayout()
-        self.pause_button = QPushButton("暂停自动传输")
-        self.pause_button.setToolTip("传输中的任务会完成；暂停后不再开始新任务")
+        self.pause_button = QPushButton("暂停任务")
+        self.pause_button.setToolTip("当前文件处理完成后暂停，恢复时继续剩余项")
         self.pause_button.clicked.connect(self.toggle_pause)
         actions.addWidget(self.pause_button)
         actions.addStretch()
-        self.send_button = QPushButton("立即传输")
+        self.send_button = QPushButton("立即处理整批")
         self.send_button.setObjectName("primary")
         self.send_button.clicked.connect(lambda: self.worker.command("manual"))
         self.send_button.setEnabled(False)
@@ -312,39 +353,101 @@ class MainWindow(QMainWindow):
         self.activateWindow()
 
     def refresh_file(self):
-        if not self.apk_path:
-            return
-        source = Path(self.apk_path)
-        self.filename.setText(source.name)
-        self.path_label.setText(self.fontMetrics().elidedText(str(source), Qt.TextElideMode.ElideMiddle, 650))
-        self.path_label.setToolTip(str(source))
-        try:
-            self.file_info.setText(f"{source.stat().st_size / (1024 * 1024):.1f} MB  ·  Android 安装包")
-        except OSError:
-            self.file_info.setText("文件路径已失效，请重新选择")
-        self.choose_button.setText("更换 APK")
+        selected = self.apk_table.currentRow()
+        scroll = self.apk_table.verticalScrollBar().value()
+        errors = list_errors(self.draft_paths)
+        self.apk_table.blockSignals(True)
+        self.apk_table.setRowCount(len(self.draft_paths))
+        for row, path in enumerate(self.draft_paths):
+            result = self.item_results.get(path_identity(path), {})
+            error = errors.get(path, "")
+            texts = [Path(path).name, path, "路径失效" if error else result.get("transfer", "等待传输"), result.get("install", "等待任务")]
+            tooltip = error or result.get("detail", "")
+            for column, text in enumerate(texts):
+                cell = QTableWidgetItem(text)
+                cell.setToolTip((path + "\n" + tooltip).strip() if column < 2 else tooltip or text)
+                if error or "失败" in text:
+                    cell.setForeground(QColor("#C3634D"))
+                elif text in ("已传输", "安装成功"):
+                    cell.setForeground(QColor("#1C9766"))
+                self.apk_table.setItem(row, column, cell)
+        if 0 <= selected < len(self.draft_paths):
+            self.apk_table.selectRow(selected)
+        self.apk_table.verticalScrollBar().setValue(scroll)
+        self.apk_table.blockSignals(False)
+        self.file_count.setText(f"01  /  APK 列表 · {len(self.draft_paths)} 项")
+        dirty = self.draft_paths != self.applied_paths
+        if self.draft_paths and errors:
+            self.list_hint.setText(f"列表有 {len(errors)} 个问题，请替换或移除标红项后重新应用。")
+        elif dirty:
+            self.list_hint.setText(f"草稿未生效 · 当前已应用 {len(self.applied_paths)} 项，请点击「应用列表」。")
+        elif not self.draft_paths:
+            self.list_hint.setText("列表为空 · 添加 APK 后应用；应用空列表会暂停自动处理。")
+        else:
+            self.list_hint.setText(f"已应用 {len(self.applied_paths)} 项 · 按列表顺序处理，可随时编辑后重新应用。")
+        self.update_actions()
 
     def select_file(self):
-        path, _ = QFileDialog.getOpenFileName(self, "选择要自动传输的 APK", str(Path(self.apk_path).parent) if self.apk_path else "", "Android 安装包 (*.apk)")
-        if not path:
+        paths, _ = QFileDialog.getOpenFileNames(self, "添加 APK（可多选）", str(Path(self.draft_paths[-1]).parent) if self.draft_paths else "", "Android 安装包 (*.apk)")
+        if paths:
+            self.set_draft(self.draft_paths + paths)
+
+    def set_draft(self, paths):
+        paths = unique_paths(paths)
+        names = [Path(path).name.casefold() for path in paths]
+        if len(names) != len(set(names)):
+            QMessageBox.warning(self, "文件名冲突", "不同目录的 APK 文件名相同，请先重命名其中一个再添加，避免在 Download 中互相覆盖。")
+            return False
+        self.draft_paths = paths
+        self.refresh_file()
+        return True
+
+    def replace_file(self):
+        row = self.apk_table.currentRow()
+        if row < 0:
             return
-        error = validate_apk(path)
-        if error:
-            QMessageBox.warning(self, "无法选择文件", error)
+        path, _ = QFileDialog.getOpenFileName(self, "替换所选 APK", str(Path(self.draft_paths[row]).parent), "Android 安装包 (*.apk)")
+        if path:
+            paths = self.draft_paths[:]
+            paths[row] = path
+            self.set_draft(paths)
+
+    def remove_file(self):
+        row = self.apk_table.currentRow()
+        if row >= 0:
+            self.set_draft(self.draft_paths[:row] + self.draft_paths[row + 1:])
+
+    def move_file(self, delta):
+        row = self.apk_table.currentRow()
+        target = row + delta
+        if row >= 0 and 0 <= target < len(self.draft_paths):
+            self.draft_paths[row], self.draft_paths[target] = self.draft_paths[target], self.draft_paths[row]
+            self.refresh_file()
+            self.apk_table.selectRow(target)
+
+    def apply_list(self):
+        errors = list_errors(self.draft_paths) if self.draft_paths else {}
+        if errors:
+            QMessageBox.warning(self, "列表无效", next(iter(errors.values())))
             return
         try:
-            save_path(path)
+            save_paths(self.draft_paths)
         except OSError:
-            QMessageBox.warning(self, "无法保存设置", "无法保存 APK 路径，请检查当前用户的数据目录权限")
+            QMessageBox.warning(self, "无法保存列表", "请检查当前用户的数据目录权限")
             return
-        self.apk_path = path
+        self.applied_paths = self.draft_paths[:]
+        self.worker.command("apply", self.applied_paths[:])
+        self.item_results = {}
         self.refresh_file()
-        self.worker.command("select", path)
-        self.add_record(f"已选择 APK：{Path(path).name}")
+        self.add_record(f"已应用列表：{len(self.applied_paths)} 个 APK")
+
+    def set_results(self, results):
+        self.item_results = {path_identity(item["path"]): item for item in results}
+        self.refresh_file()
 
     def toggle_pause(self):
         self.paused = not self.paused
-        text = "恢复自动传输" if self.paused else "暂停自动传输"
+        text = "恢复任务" if self.paused else "暂停任务"
         self.pause_button.setText(text)
         self.tray_pause.setText(text)
         self.worker.command("pause", self.paused)
@@ -410,6 +513,7 @@ class MainWindow(QMainWindow):
             "error": ("#FFF0EE", "#F8DDD8", "#D16A50"),
             "invalid": ("#FFF6E7", "#F4E5C7", "#B98628"),
             "paused": ("#EEF0F5", "#DFE4ED", "#8591A4"),
+            "warning": ("#FFF6E7", "#F4E5C7", "#B98628"),
         }
         background, border, accent = palettes.get(state, ("#EAF1FF", "#DDE8FF", "#3473EF"))
         self.status_card.setStyleSheet(f"QFrame#status {{background:{background};border:1px solid {border};border-radius:16px;}}")
@@ -417,8 +521,8 @@ class MainWindow(QMainWindow):
         self.tray.setToolTip(f"APK 送达 · {title}")
         if state not in ("copying", "installing"):
             self.progress_bar.setRange(0, 100)
-            self.progress_bar.setValue(100 if state in ("success", "waiting_install") else 0)
-            self.percent.setText("完成" if state == "success" else "已传输" if state == "waiting_install" else "")
+            self.progress_bar.setValue(100 if state in ("success", "warning", "waiting_install") else 0)
+            self.percent.setText("完成" if state == "success" else "已结束" if state == "warning" else "已传输" if state == "waiting_install" else "")
         else:
             self.progress_bar.setRange(0, 0)
             self.percent.setText("")
@@ -437,13 +541,21 @@ class MainWindow(QMainWindow):
         self.update_actions()
 
     def update_actions(self):
+        if not hasattr(self, "send_button"):
+            return
         self.choose_button.setEnabled(not self.busy and not self.quitting)
+        selected = self.apk_table.currentRow()
+        for button in self.edit_buttons:
+            button.setEnabled(selected >= 0 and not self.busy and not self.quitting)
+        valid_draft = not self.draft_paths or not list_errors(self.draft_paths)
+        self.apply_button.setEnabled(valid_draft and not self.busy and not self.quitting)
         self.auto_switch.setEnabled(not self.quitting)
         self.adb_button.setEnabled(not self.busy and not self.quitting)
         self.send_button.setEnabled(not self.busy and not self.paused and not self.quitting
-                                    and self.device_name != "尚未连接" and validate_apk(self.apk_path) is None
+                                    and self.device_name != "尚未连接" and self.draft_paths == self.applied_paths
+                                    and not list_errors(self.applied_paths)
                                     and not self.worker.policy.path_lost)
-        self.send_button.setText("正在处理…" if self.busy else "立即传输")
+        self.send_button.setText("正在处理…" if self.busy else "立即处理整批")
 
     def set_progress(self, sent, total):
         self.progress_bar.setRange(0, 100)

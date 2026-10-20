@@ -87,7 +87,7 @@ class WorkerTests(unittest.TestCase):
             self.assertEqual(counts, [1])
             self.assertEqual(backend.transfers, [b"old version", b"new version"])
 
-    def test_disconnect_during_transfer_does_not_mark_completed(self):
+    def test_failed_item_is_reported_without_repeating_the_batch(self):
         with tempfile.TemporaryDirectory() as directory:
             source = Path(directory) / "client.apk"
             source.write_bytes(b"data")
@@ -97,8 +97,9 @@ class WorkerTests(unittest.TestCase):
             worker.stopping = ClockStop([])
             with patch("apk_placer.worker.log.exception"):
                 worker._monitor(backend)
-            self.assertFalse(worker.policy.completed)
-            self.assertGreater(worker.policy.retry_after, 0)
+            self.assertTrue(worker.policy.completed)
+            self.assertEqual(worker.results[0].transfer, "传输失败")
+            self.assertEqual(len(backend.transfers), 0)
 
 
 if __name__ == "__main__":
