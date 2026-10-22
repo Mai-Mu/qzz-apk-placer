@@ -13,7 +13,7 @@ from PySide6.QtWidgets import (
     QApplication, QFileDialog, QFrame, QHBoxLayout, QLabel, QMainWindow,
     QMenu, QMessageBox, QProgressBar, QPushButton, QSystemTrayIcon,
     QTextEdit, QVBoxLayout, QWidget, QAbstractButton, QScrollArea, QDialog,
-    QTableWidget, QTableWidgetItem, QHeaderView, QAbstractItemView,
+    QTableWidget, QTableWidgetItem, QHeaderView, QAbstractItemView, QSizePolicy,
 )
 
 from .core import data_directory, load_paths, save_paths, list_errors, unique_paths, path_identity, load_adb_path, save_setting
@@ -25,17 +25,15 @@ STYLE = """
 QMainWindow, QWidget#root { background: #F5F7FB; }
 QWidget { color: #17243B; font-family: 'Microsoft YaHei UI'; font-size: 13px; }
 QLabel { background: transparent; }
-QLabel#brand { font-size: 21px; font-weight: 700; }
-QLabel#eyebrow { color: #3473EF; font-size: 11px; font-weight: 700; }
-QLabel#headline { font-size: 27px; font-weight: 700; }
+QLabel#brand { font-size: 18px; font-weight: 700; }
 QLabel#muted { color: #758198; }
-QLabel#section { color: #8490A3; font-size: 11px; font-weight: 600; }
-QFrame#card { background: white; border: 1px solid #E7EBF2; border-radius: 16px; }
-QFrame#status { background: #EAF1FF; border: 1px solid #DDE8FF; border-radius: 16px; }
-QLabel#statusTitle { font-size: 19px; font-weight: 700; }
+QLabel#section { color: #617089; font-size: 12px; font-weight: 600; }
+QFrame#card { background: white; border: 1px solid #E7EBF2; border-radius: 12px; }
+QFrame#status { background: #EAF1FF; border: 1px solid #DDE8FF; border-radius: 12px; }
+QLabel#statusTitle { font-size: 17px; font-weight: 700; }
 QLabel#filename { font-size: 16px; font-weight: 600; }
-QLabel#badge { color: #3473EF; background: #EAF1FF; border-radius: 11px; padding: 5px 10px; font-size: 11px; }
-QPushButton { background: white; border: 1px solid #DFE5EF; border-radius: 9px; padding: 10px 18px; font-weight: 600; }
+QLabel#badge { color: #758198; background: #EBEFF5; border-radius: 8px; padding: 4px 8px; font-size: 11px; }
+QPushButton { background: white; border: 1px solid #DFE5EF; border-radius: 8px; padding: 7px 13px; font-weight: 600; }
 QPushButton:hover { background: #F3F6FC; border-color: #BCCBE2; }
 QPushButton:pressed { background: #E9EFF9; }
 QPushButton:disabled { color: #ADB6C5; background: #F1F3F7; border-color: #E6EAF0; }
@@ -50,9 +48,9 @@ QMenu { background: white; border: 1px solid #E4E9F1; padding: 6px; }
 QMenu::item { padding: 8px 24px; }
 QMenu::item:selected { background: #EAF1FF; border-radius: 5px; }
 QTableWidget { background: #FFFFFF; border: 1px solid #E7EBF2; border-radius: 8px; gridline-color: #EEF1F6; selection-background-color: #EAF1FF; selection-color: #17243B; }
-QHeaderView::section { background: #F7F9FC; color: #758198; border: none; padding: 8px; font-size: 11px; }
-QTableWidget::item { padding: 7px; border-bottom: 1px solid #F0F3F8; }
-QPushButton#compact { padding: 6px 12px; font-size: 12px; }
+QHeaderView::section { background: #F7F9FC; color: #758198; border: none; padding: 6px; font-size: 12px; }
+QTableWidget::item { padding: 5px; border-bottom: 1px solid #F0F3F8; }
+QPushButton#compact { padding: 5px 10px; font-size: 12px; }
 """
 
 
@@ -112,9 +110,9 @@ class MainWindow(QMainWindow):
         super().__init__()
         self.setWindowTitle(f"APK 送达 v{__version__} · 多 APK 批量处理")
         self.setWindowIcon(app_icon())
-        available_height = QApplication.primaryScreen().availableGeometry().height()
-        self.resize(940, min(920, available_height - 50))
-        self.setMinimumSize(790, 620)
+        available = QApplication.primaryScreen().availableGeometry()
+        self.setMinimumSize(720, 520)
+        self.resize(min(820, available.width() - 48), min(620, available.height() - 64))
         self.applied_paths = load_paths()
         self.draft_paths = self.applied_paths[:]
         self.item_results = {}
@@ -146,33 +144,26 @@ class MainWindow(QMainWindow):
         scroll.setWidget(root)
         self.setCentralWidget(scroll)
         layout = QVBoxLayout(root)
-        layout.setContentsMargins(28, 22, 28, 20)
-        layout.setSpacing(14)
+        layout.setContentsMargins(18, 16, 18, 16)
+        layout.setSpacing(10)
         top = QHBoxLayout()
         icon = QLabel()
-        icon.setPixmap(app_icon().pixmap(34, 34))
+        icon.setPixmap(app_icon().pixmap(28, 28))
         top.addWidget(icon)
         top.addSpacing(4)
         top.addWidget(label("APK 送达", "brand"))
         top.addStretch()
-        top.addWidget(label("USB  ·  多 APK 批量处理", "badge"))
+        top.addWidget(label(f"v{__version__}", "badge"))
         layout.addLayout(top)
-
-        intro = QVBoxLayout()
-        intro.setSpacing(7)
-        intro.addWidget(label("PDA FILE DELIVERY", "eyebrow"))
-        intro.addWidget(label("配好一份列表，整批送达。", "headline"))
-        intro.addWidget(label("先传完全部 APK，再按列表顺序安装。适用于 Android Pad / PDA。", "muted"))
-        layout.addLayout(intro)
 
         self.status_card = QFrame()
         self.status_card.setObjectName("status")
         status_layout = QVBoxLayout(self.status_card)
-        status_layout.setContentsMargins(22, 19, 22, 18)
-        status_layout.setSpacing(9)
+        status_layout.setContentsMargins(16, 12, 16, 12)
+        status_layout.setSpacing(6)
         row = QHBoxLayout()
         self.status_dot = label("●")
-        self.status_dot.setStyleSheet("color: #3473EF; font-size: 20px;")
+        self.status_dot.setStyleSheet("color: #3473EF; font-size: 16px;")
         row.addWidget(self.status_dot)
         self.status_title = label("正在启动设备检测", "statusTitle")
         row.addWidget(self.status_title, 1)
@@ -183,7 +174,7 @@ class MainWindow(QMainWindow):
         status_layout.addWidget(self.status_detail)
         self.progress_bar = QProgressBar()
         self.progress_bar.setTextVisible(False)
-        self.progress_bar.setFixedHeight(6)
+        self.progress_bar.setFixedHeight(4)
         self.progress_bar.setRange(0, 100)
         self.progress_bar.setValue(0)
         status_layout.addWidget(self.progress_bar)
@@ -192,10 +183,10 @@ class MainWindow(QMainWindow):
         file_card = QFrame()
         file_card.setObjectName("card")
         file_layout = QVBoxLayout(file_card)
-        file_layout.setContentsMargins(18, 13, 18, 14)
-        file_layout.setSpacing(8)
+        file_layout.setContentsMargins(14, 12, 14, 12)
+        file_layout.setSpacing(6)
         file_row = QHBoxLayout()
-        self.file_count = label("01  /  APK 列表 · 0 项", "section")
+        self.file_count = label("APK 列表 · 0 项", "section")
         file_row.addWidget(self.file_count)
         file_row.addStretch()
         self.choose_button = QPushButton("＋ 添加 APK")
@@ -217,13 +208,19 @@ class MainWindow(QMainWindow):
         header.setSectionResizeMode(1, QHeaderView.ResizeMode.Stretch)
         header.setSectionResizeMode(2, QHeaderView.ResizeMode.Fixed)
         header.setSectionResizeMode(3, QHeaderView.ResizeMode.Fixed)
-        self.apk_table.setColumnWidth(0, 175)
-        self.apk_table.setColumnWidth(2, 115)
-        self.apk_table.setColumnWidth(3, 125)
-        self.apk_table.setFixedHeight(150)
-        self.apk_table.verticalHeader().setDefaultSectionSize(36)
+        self.apk_table.setColumnWidth(0, 150)
+        self.apk_table.setColumnWidth(2, 90)
+        self.apk_table.setColumnWidth(3, 100)
+        self.apk_table.setMinimumHeight(116)
+        self.apk_table.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Ignored)
+        self.apk_table.verticalHeader().setDefaultSectionSize(32)
+        self.empty_list = label("点击「添加 APK」选择文件", "muted")
+        self.empty_list.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents)
+        empty_layout = QVBoxLayout(self.apk_table.viewport())
+        empty_layout.setContentsMargins(0, 0, 0, 0)
+        empty_layout.addWidget(self.empty_list, alignment=Qt.AlignmentFlag.AlignCenter)
         self.apk_table.itemSelectionChanged.connect(self.update_actions)
-        file_layout.addWidget(self.apk_table)
+        file_layout.addWidget(self.apk_table, 1)
         edit_row = QHBoxLayout()
         self.edit_buttons = []
         for text, callback in (("替换", self.replace_file), ("移除", self.remove_file),
@@ -236,72 +233,73 @@ class MainWindow(QMainWindow):
         edit_row.addStretch()
         self.apply_button = QPushButton("应用列表")
         self.apply_button.setObjectName("primary")
+        self.apply_button.setToolTip("保存并应用当前列表；设备已连接时立即开始整批处理。应用空列表会暂停自动处理。")
         self.apply_button.clicked.connect(self.apply_list)
         edit_row.addWidget(self.apply_button)
         file_layout.addLayout(edit_row)
-        self.list_hint = label("添加 APK 后点击「应用列表」，支持不同目录。", "muted", True)
+        self.list_hint = label("", "muted", True)
         file_layout.addWidget(self.list_hint)
-        layout.addWidget(file_card)
+        layout.addWidget(file_card, 1)
 
         details_row = QHBoxLayout()
-        details_row.setSpacing(14)
+        details_row.setSpacing(10)
         target_card = QFrame()
         target_card.setObjectName("card")
         target_layout = QVBoxLayout(target_card)
-        target_layout.setContentsMargins(22, 17, 22, 18)
-        target_layout.setSpacing(12)
-        target_layout.addWidget(label("02  /  目标设备", "section"))
+        target_layout.setContentsMargins(14, 12, 14, 12)
+        target_layout.setSpacing(6)
         device_row = QHBoxLayout()
-        device_row.addWidget(label("连接设备", "muted"))
+        device_row.addWidget(label("设备", "section"))
         self.device_label = label("尚未连接")
         device_row.addStretch()
         device_row.addWidget(self.device_label)
         target_layout.addLayout(device_row)
         destination = QHBoxLayout()
-        destination.addWidget(label("保存位置", "muted"))
+        destination_label = label("Download", "muted")
+        destination_label.setToolTip("保存到设备内部存储的 Download 文件夹，同名文件直接覆盖")
+        destination.addWidget(destination_label)
         destination.addStretch()
-        destination.addWidget(label("内部存储  /  Download"))
-        target_layout.addLayout(destination)
-        result_row = QHBoxLayout()
-        result_row.addWidget(label("传输结果", "muted"))
-        result_row.addStretch()
         self.transfer_result = label("等待传输")
-        result_row.addWidget(self.transfer_result)
-        target_layout.addLayout(result_row)
+        destination.addWidget(self.transfer_result)
+        target_layout.addLayout(destination)
         details_row.addWidget(target_card, 1)
 
         install_card = QFrame()
         install_card.setObjectName("card")
         install_layout = QVBoxLayout(install_card)
-        install_layout.setContentsMargins(22, 16, 22, 16)
-        install_layout.setSpacing(9)
+        install_layout.setContentsMargins(14, 12, 14, 12)
+        install_layout.setSpacing(6)
         switch_row = QHBoxLayout()
-        switch_row.addWidget(label("03  /  自动安装", "section"))
+        switch_row.addWidget(label("自动安装", "section"))
         switch_row.addStretch()
+        self.adb_button = QPushButton("配置 ADB")
+        self.adb_button.setObjectName("link")
+        self.adb_button.setToolTip("已内置 ADB；查看工具路径或设置备用路径")
+        self.adb_button.clicked.connect(self.configure_adb)
+        switch_row.addWidget(self.adb_button)
+        switch_row.addSpacing(8)
         self.auto_switch = ToggleSwitch()
         self.auto_switch.setAccessibleName("自动安装")
-        self.auto_switch.setToolTip("每次启动默认关闭；从下一次传输任务生效，进行中的安装会先完成")
+        self.auto_switch.setToolTip("每次启动默认关闭；从下一批生效。保留应用数据覆盖更新，设备需开启 USB 调试并授权。")
         self.auto_switch.toggled.connect(self.toggle_install)
         switch_row.addWidget(self.auto_switch)
         install_layout.addLayout(switch_row)
         self.install_result = label("已关闭 · 仅传输 APK", "muted", True)
         install_layout.addWidget(self.install_result)
-        help_row = QHBoxLayout()
-        help_row.addWidget(label("保留应用数据覆盖更新，需 USB 调试授权", "muted", True), 1)
-        self.adb_button = QPushButton("配置 ADB")
-        self.adb_button.setObjectName("link")
-        self.adb_button.clicked.connect(self.configure_adb)
-        help_row.addWidget(self.adb_button)
-        install_layout.addLayout(help_row)
         details_row.addWidget(install_card, 1)
         layout.addLayout(details_row)
 
         actions = QHBoxLayout()
+        self.log_button = QPushButton("传输记录")
+        self.log_button.setObjectName("link")
+        self.log_button.setToolTip("查看各项处理结果；关闭主窗口后程序仍在托盘运行")
+        self.log_button.clicked.connect(self.toggle_log)
+        actions.addWidget(self.log_button)
+        actions.addStretch()
         self.pause_button = QPushButton("暂停任务")
         self.pause_button.setToolTip("当前文件处理完成后暂停，恢复时继续剩余项")
         self.pause_button.clicked.connect(self.toggle_pause)
         actions.addWidget(self.pause_button)
-        actions.addStretch()
         self.send_button = QPushButton("立即处理整批")
         self.send_button.setObjectName("primary")
         self.send_button.clicked.connect(lambda: self.worker.command("manual"))
@@ -309,21 +307,12 @@ class MainWindow(QMainWindow):
         actions.addWidget(self.send_button)
         layout.addLayout(actions)
 
-        footer = QHBoxLayout()
-        footer.addWidget(label("同名覆盖  ·  关闭窗口后在托盘继续运行", "muted"))
-        footer.addStretch()
-        self.log_button = QPushButton("传输记录  ↗")
-        self.log_button.setObjectName("link")
-        self.log_button.clicked.connect(self.toggle_log)
-        footer.addWidget(self.log_button)
-        layout.addLayout(footer)
         self.history = QTextEdit()
         self.history.setReadOnly(True)
         self.history.document().setMaximumBlockCount(150)
         self.history.setFixedHeight(130)
         self.history.hide()
         layout.addWidget(self.history)
-        layout.addStretch(1)
 
     def setup_tray(self):
         self.tray = QSystemTrayIcon(self.windowIcon(), self)
@@ -375,16 +364,16 @@ class MainWindow(QMainWindow):
             self.apk_table.selectRow(selected)
         self.apk_table.verticalScrollBar().setValue(scroll)
         self.apk_table.blockSignals(False)
-        self.file_count.setText(f"01  /  APK 列表 · {len(self.draft_paths)} 项")
+        self.file_count.setText(f"APK 列表 · {len(self.draft_paths)} 项")
+        self.empty_list.setVisible(not self.draft_paths)
         dirty = self.draft_paths != self.applied_paths
         if self.draft_paths and errors:
-            self.list_hint.setText(f"列表有 {len(errors)} 个问题，请替换或移除标红项后重新应用。")
+            self.list_hint.setText(f"{len(errors)} 项路径失效，请替换或移除后应用。")
         elif dirty:
-            self.list_hint.setText(f"草稿未生效 · 当前已应用 {len(self.applied_paths)} 项，请点击「应用列表」。")
-        elif not self.draft_paths:
-            self.list_hint.setText("列表为空 · 添加 APK 后应用；应用空列表会暂停自动处理。")
+            self.list_hint.setText("列表已修改，点击「应用列表」生效。")
         else:
-            self.list_hint.setText(f"已应用 {len(self.applied_paths)} 项 · 按列表顺序处理，可随时编辑后重新应用。")
+            self.list_hint.setText("")
+        self.list_hint.setVisible(bool(self.list_hint.text()))
         self.update_actions()
 
     def select_file(self):
@@ -516,8 +505,8 @@ class MainWindow(QMainWindow):
             "warning": ("#FFF6E7", "#F4E5C7", "#B98628"),
         }
         background, border, accent = palettes.get(state, ("#EAF1FF", "#DDE8FF", "#3473EF"))
-        self.status_card.setStyleSheet(f"QFrame#status {{background:{background};border:1px solid {border};border-radius:16px;}}")
-        self.status_dot.setStyleSheet(f"color:{accent};font-size:20px;")
+        self.status_card.setStyleSheet(f"QFrame#status {{background:{background};border:1px solid {border};border-radius:12px;}}")
+        self.status_dot.setStyleSheet(f"color:{accent};font-size:16px;")
         self.tray.setToolTip(f"APK 送达 · {title}")
         if state not in ("copying", "installing"):
             self.progress_bar.setRange(0, 100)
@@ -571,9 +560,13 @@ class MainWindow(QMainWindow):
 
     def toggle_log(self):
         visible = not self.history.isVisible()
+        if visible:
+            self.log_closed_height = self.height()
         self.history.setVisible(visible)
-        self.log_button.setText("收起记录  ↗" if visible else "传输记录  ↗")
-        self.resize(self.width(), self.height() + (140 if visible else -140))
+        self.log_button.setText("收起记录" if visible else "传输记录")
+        target_height = (min(self.height() + 140, self.screen().availableGeometry().height() - 64)
+                         if visible else self.log_closed_height)
+        self.resize(self.width(), max(self.minimumHeight(), target_height))
 
     def closeEvent(self, event):
         if self.quitting:
