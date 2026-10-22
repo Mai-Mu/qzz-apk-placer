@@ -6,7 +6,7 @@
 
 一个为 Android Pad / PDA 交付场景准备的 Windows 小工具。配置电脑上的 APK 列表，接入一台设备，先全部传到内部存储的 `Download`，再按需逐个安装。
 
-v1.2.1 便携包已内置官方 ADB，无需另外下载或配置。支持多 APK 列表：添加多少就处理多少，可排序、逐项查看结果；自动安装每次启动默认关闭。
+v1.2.2 使用更紧凑的界面，默认窗口 820 × 620，保留完整的批量处理与状态反馈。便携包已内置官方 ADB，无需另外下载或配置；自动安装每次启动默认关闭。
 
 [下载 Windows 版](https://github.com/Mai-Mu/qzz-apk-placer/releases/latest) · [使用说明](docs/USER_GUIDE.md) · [开发与构建](docs/DEVELOPMENT.md) · [更新记录](CHANGELOG.md)
 
@@ -14,7 +14,7 @@ v1.2.1 便携包已内置官方 ADB，无需另外下载或配置。支持多 AP
 ![Python](https://img.shields.io/badge/Python-3.10%2B-3776AB)
 ![Release](https://img.shields.io/github/v/release/Mai-Mu/qzz-apk-placer)
 
-<img src="assets/preview.png" alt="APK 送达主界面：选择 APK、查看 PDA 连接状态与传输结果" width="760">
+<img src="assets/preview.png" alt="APK 送达紧凑主界面：APK 列表、设备状态与自动安装开关" width="760">
 
 </div>
 
@@ -89,7 +89,7 @@ powershell -ExecutionPolicy Bypass -File .\build.ps1
 python scripts/package_release.py
 ```
 
-67 项自动化测试通过，包含内置工具优先级、移动目录和发布包完整性检查。v1.2.0 在 LZT-101A（Android 13）实测两个 APK 先传完再安装，以及第一个签名冲突失败后第二个继续更新、私有数据保留。完整范围见 [TESTING.md](TESTING.md)。历史 v1.1.0 另在 IT-400i（Android 9）验证过单 APK 安装与更新。
+67 项自动化测试通过，包含内置工具优先级、移动目录和发布包完整性检查。紧凑布局另通过空列表、多项滚动、小窗口、授权等待、路径失效和日志展开收起检查。v1.2.0 在 LZT-101A（Android 13）实测两个 APK 先传完再安装，以及第一个签名冲突失败后第二个继续更新、私有数据保留。完整范围见 [TESTING.md](TESTING.md)。历史 v1.1.0 另在 IT-400i（Android 9）验证过单 APK 安装与更新。
 
 ## 常见问题
 

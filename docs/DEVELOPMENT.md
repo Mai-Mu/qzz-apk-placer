@@ -91,15 +91,15 @@ python scripts/package_release.py
 
 ```text
 release/
-  QzzApkPlacer-v1.2.1-windows-x64.zip
-  QzzApkPlacer-v1.2.1-source.zip
+  QzzApkPlacer-v1.2.2-windows-x64.zip
+  QzzApkPlacer-v1.2.2-source.zip
   SHA256SUMS.txt
 ```
 
 发布前确认现有 `dist` 与待发布源码版本对应。压缩包通过 ZIP 完整性检查，文件散列可用于验证下载文件。校验示例：
 
 ```powershell
-Get-FileHash .\QzzApkPlacer-v1.2.1-windows-x64.zip -Algorithm SHA256
+Get-FileHash .\QzzApkPlacer-v1.2.2-windows-x64.zip -Algorithm SHA256
 ```
 
 创建版本标签后，在 GitHub Releases 附加两个 ZIP 和 `SHA256SUMS.txt`。客户 APK、运行日志和本地设置不随包发布。
